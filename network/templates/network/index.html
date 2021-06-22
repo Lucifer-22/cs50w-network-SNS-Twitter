@@ -101,6 +101,7 @@
                     const ogHtml = tweetsContainerElement.innerHTML
                     tweetsContainerElement.innerHTML = newTweetElement + ogHtml
                     myForm.reset()
+                    loadTweets(tweetsContainerElement, "1")
                 } else if (xhr.status === 401 || xhr.status === 403) {
                     alert("You must login!")
                     window.location.href = "/login"
