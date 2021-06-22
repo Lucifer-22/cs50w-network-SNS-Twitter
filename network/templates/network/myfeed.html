@@ -1,0 +1,493 @@
+{% extends "network/layout.html" %}
+
+{% block body %}
+<div class="row text-center">
+    <div class="col">
+        <h2>Welcome to your Personal Feed</h2>
+    </div>
+</div>
+
+
+<div class="row mb-3">
+    <div class="col-md-4 mx-auto col-10">
+        <form class="form" id="tweet-create-form" method="POST" action="/tweet-create">
+            {% csrf_token %}
+            <div class="d-none alert alert-danger" id="tweet-create-form-error">
+            </div>
+            <input type="hidden" value="/" name="next">
+            <textarea class="form-control" name="content" placeholder="What's happening?"></textarea>
+            <button type="submit" class="btn btn-primary col-12">TWEET</button>
+        </form>
+    </div>
+</div>
+
+
+<div class="row justify-content-center" id="tweets">
+    Replace me
+</div>
+
+<div id="handleNav">
+    Navigation for pageination
+</div>
+
+
+<div id="userProfile" class="container-fluid">
+    <div class="profileDiv">
+        <div class="userDiv">
+            <div id="profileDiv">
+                <h3 id="profile_username"></h3>
+            </div>
+            <div id="followingDiv">
+                <h7 id="profile_followings"></h7><br>
+                <h7 id="profile_followers"></h7>
+            </div>
+        </div>
+        {% if user.is_authenticated %}
+        <div id="follow_button_div">
+            <button id="follow_button" class="btn btn-primary">Follow</button>
+        </div>
+        {% endif %}
+    </div>
+    <div class="row justify-content-center" id="Profile-tweets">
+        Replace me
+    </div>
+    <div class="pagination justify-content-center">
+        <nav aria-label="Page navigation example">
+            <ul class="pagination justify-content-center">
+              <li class="page-item">
+                  <button class="page-link" tabindex="-1" aria-disabled="true" id="previousProfileNav">Previous</button>
+                
+              </li>
+              <li class="page-item">
+                <button class="page-link btn-primary btn-outline-success" id="nextProfileNav">Next</button>
+            </li>
+            </ul>
+          </nav>
+    </div>
+</div>
+ 
+<script>
+//document.addEventListener('DOMContentLoaded', function() {
+        
+        const tweetCreateFormEl = document.getElementById("tweet-create-form")
+        tweetCreateFormEl.addEventListener("submit", handleTweetCreateFormDidSubmit)
+        const tweetsContainerElement = document.getElementById("tweets")
+        const navElement = document.getElementById("handleNav")
+        const previousElement = document.getElementById("previous_link")
+        const nextElement = document.getElementById("next_link")
+        const profileTweetContainer = document.getElementById("Profile-tweets")
+        //tweetsElement.innerHTML = "Loading..."
+
+
+//$$$$$$$$$$$$$$$$$$$$$$ FORMS $$$$$$$$$$$$$$$$$$$$$$$$
+// Forms in JS        
+        function handleTweetCreateFormDidSubmit(event){
+            event.preventDefault()
+            const myForm = event.target
+            const myFormData = new FormData(myForm)
+            const url = myForm.getAttribute("action")
+            const method = myForm.getAttribute("method")
+            const xhr = new XMLHttpRequest()
+            const responseType = "json"
+            xhr.responseType = responseType
+            xhr.open(method, url)
+            xhr.setRequestHeader("HTTP_X_REQUESTED_WITH", "XMLHttpRequest")
+            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest")
+            xhr.onload = function() {
+                if (xhr.status === 201){
+                    handleTweetFormError("", false)
+                    const newTwt = xhr.response
+                    const newTweetElement = formatTweetElement(newTwt)
+                    const ogHtml = tweetsContainerElement.innerHTML
+                    tweetsContainerElement.innerHTML = newTweetElement + ogHtml
+                    myForm.reset()
+                } else if (xhr.status === 401 || xhr.status === 403) {
+                    alert("You must login!")
+                    window.location.href = "/login"
+                } else {
+                    const errorJson = xhr.response
+                    const contentError = errorJson.content
+                    let contentErrorMsg;
+                    if (contentError){
+                        contentErrorMsg = contentError[0]
+                        if (contentErrorMsg) {
+                            handleTweetFormError(contentErrorMsg, true)
+                        }
+                        else{
+                            alert("An error occured. Please try again.")
+                        }
+                    }
+                    alert("An error occured. Please try again.")                    
+                }
+            }
+            xhr.onerror = function() {
+                alert("An error occurred. Please try again later.")
+            }
+            xhr.send(myFormData)            
+        }
+
+//Form submission error handling
+        function handleTweetFormError(msg, display){
+            var myErrorDiv = document.getElementById("tweet-create-form-error")
+            if (display === true) {
+                // show error
+                myErrorDiv.setAttribute("class", "d-block alert alert-danger")
+                myErrorDiv.innerText = msg
+            } else {
+                // hide error
+                myErrorDiv.setAttribute("class", "d-none alert alert-danger")
+            }
+        }
+        
+//$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+
+//Loading Tweets list on Home
+        function loadTweets(tweetsElement, page) {
+            const xhr = new XMLHttpRequest()
+            const method = "GET"
+            var page_no = parseInt(page)
+            const url = `/feeds?page=${page_no}`
+            const responseType = "json"
+
+            xhr.responseType = responseType
+            xhr.open(method, url) // Open request with prescribed method and url 
+            xhr.onload = function() { 
+                const serverResponse = xhr.response
+                const listedItems = serverResponse.results.tweets //array
+                var currentUser_name = serverResponse.results.currentUser
+
+                var finalTweetStr = ""
+                var i;
+                for (i=0; i<listedItems.length; i++) {
+                    var tweetObj = listedItems[i]
+                    var currentItem = formatTweetElement(tweetObj, currentUser_name)
+                    finalTweetStr += currentItem
+                }
+                //console.log(listedItems)
+                tweetsElement.innerHTML = finalTweetStr
+                navHandler(navElement, page)
+
+            }
+            xhr.send() //trigger that requests
+        }
+        loadTweets(tweetsContainerElement, "1")
+
+        
+
+//################################PROFILE###############
+
+    if (document.querySelector('#userProfile') != null) {
+        document.querySelector('#userProfile').style.display = 'none';
+    }
+        function handleTweetfollowUnfollowBtn(username, currentUser, action) {
+            console.log(username, currentUser, "From followUnfollowButton Clicked", action, "<= Action")
+            const url = `profile/${username}/action`
+            const method = "POST" 
+            let followButton = document.querySelector('#follow_button');
+            if (followButton.innerHTML === 'Follow') {
+                toaction = 'follow';
+                followButton.innerHTML = 'Unfollow';
+            } else {
+                toaction = 'unfollow';
+                followButton.innerHTML = 'Follow';
+            }
+            const data = JSON.stringify({
+                action: toaction
+            })
+            const xhr = new XMLHttpRequest()
+            const csrftoken = getCookie('csrftoken');
+
+            xhr.open(method, url)
+            xhr.setRequestHeader("Content-Type", "application/json")
+            xhr.setRequestHeader("HTTP_X_REQUESTED_WITH", "XMLHttpRequest")
+            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest")
+            xhr.setRequestHeader("X-CSRFToken", csrftoken)
+            xhr.onload = function() {
+                profile_manager(username)
+            }
+            xhr.send(data)
+
+            return
+        }
+
+    function profile_manager(username) {
+        document.querySelector('#tweet-create-form').style.display = 'none';
+        document.querySelector('#tweets').style.display = 'none';
+        document.querySelector('#handleNav').style.display = 'none';
+
+        fetch(`/profile/${username}`)
+            .then((response) => response.json())
+            .then((profile) => {
+                let profileFollowers = profile.results.followers;
+                let profileFollowings = profile.results.followings;
+                let isFollowed = profile.results.isFollowed;
+                let currentUser = profile.results.currentUser_name;
+                //console.log(profile)
+                //console.log(username, currentUser);
+
+                if (username != currentUser) {
+                    followButton = document.querySelector('#follow_button');
+                    followButton.style.display = 'block';
+                    if (isFollowed == false) {
+                        followButton.onclick = () => handleTweetfollowUnfollowBtn(username, currentUser, 'follow');
+                    }else {
+                        followButton.onclick = () => handleTweetfollowUnfollowBtn(username, currentUser, 'unfollow');
+                    }
+                }
+                else {
+                    document.querySelector('#follow_button').style.display = 'None';
+                    document.querySelector('#tweet-create-form').style.display = 'block';
+                }
+                document.querySelector('#userProfile').style.display = 'block';
+
+                userDOM = document.querySelector('#profile_username');
+                userDOM.innerHTML = username;
+                userDOM.onclick = () => show_profile(username);
+
+                following = document.querySelector('#profile_followings');
+                following.innerHTML = `Followings: ${profileFollowings}`;
+                following.onclick = 'nothing yet';
+
+                followers = document.querySelector('#profile_followers');
+                followers.innerHTML = `Followers: ${profileFollowers}`;
+                followers.onclick = 'nothing yet';
+
+                if (isFollowed === true) {
+                    followButton.innerHTML = 'Unfollow';
+                }
+        });
+        loadProfileTweets(username, 1)
+    }
+
+    function loadProfileTweets(username, page) {
+        const xhr = new XMLHttpRequest()
+        const method = "GET"
+        var page_no = parseInt(page)
+        const url = `/profile/${username}?page=${page_no}`
+        const responseType = "json"
+        xhr.responseType =responseType
+        xhr.open(method, url)
+        xhr.onload = function(){
+            const serverResponse = xhr.response
+            const listedItems = serverResponse.results.Tweets //array
+            var currentloggedUser = serverResponse.results.currentUser_name
+
+            var finalTweetStr = ""
+            var i;
+            for(i=0; i<listedItems.length;i++) {
+                var tweetObj = listedItems[i]
+                var currentItem = formatTweetElement(tweetObj, currentloggedUser)
+                finalTweetStr += currentItem
+            }
+            document.querySelector('#Profile-tweets').innerHTML = finalTweetStr
+        }
+        xhr.send()
+        profileNavManager(username, page_no)
+    }
+
+    function profileNavManager(username, page){
+        const xhr = new XMLHttpRequest()
+        const method = "GET"
+        var page_no = parseInt(page)
+        const url = `/profile/${username}?page=${page_no}`
+        const responseType = "json"
+        xhr.responseType =responseType
+        xhr.open(method, url)
+        xhr.onload = function(){
+            const serverResponse = xhr.response
+            const pagecounter = serverResponse.count / 10
+            const next_page = serverResponse.next
+            const previous_page = serverResponse.previous
+            let previousNavElement = document.querySelector('#previousProfileNav')
+            let nextNavElement = document.querySelector('#nextProfileNav')
+            console.log("Previous page Address:", previous_page)
+            console.log("Next page Address:", next_page)
+            console.log("PAGE:", page_no)
+
+
+            if (previous_page != null) {
+                //var previous_url = new URL(previous_page);
+                //var previous_page_number = previous_url.searchParams.get("page");
+                var previous_page_no = page_no - 1
+                previousNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("Went back")
+                    loadProfileTweets(username, previous_page_no)
+                };
+            } else {
+                previousNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("STUCK start")
+                    loadProfileTweets(username, 1)
+                };
+            }
+            if (next_page != null) {
+                //var next_url = new URL(next_page);
+                //var next_page_number = next_url.searchParams.get("page");
+                var next_page_no = page_no + 1
+                nextNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("Went forward")
+                    loadProfileTweets(username, next_page_no)
+                };
+            } else {
+                nextNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("STUCK last")
+                    loadProfileTweets(username, page_no)
+                };
+            }   
+        }
+        xhr.send()
+    }
+        
+//####################################################
+
+        
+// SImple functions for management purposes
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function handleTweetActionBtn(tweet_id, currentCount, action) {
+            console.log(tweet_id, currentCount)
+            console.log(action, "<= Check this out")
+            const url = "/api/tweets/action"
+            const list_url = window.location.href
+            console.log(list_url)
+            const method = "POST"
+            const data = JSON.stringify({
+                id: tweet_id,
+                action: action
+            })
+            const xhr = new XMLHttpRequest()
+            const csrftoken = getCookie('csrftoken');
+
+            xhr.open(method, url)
+            xhr.setRequestHeader("Content-Type", "application/json")
+            xhr.setRequestHeader("HTTP_X_REQUESTED_WITH", "XMLHttpRequest")
+            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest")
+            xhr.setRequestHeader("X-CSRFToken", csrftoken)
+            xhr.onload = function() {
+                loadTweets(tweetsContainerElement, "1")
+            }
+            xhr.send(data)
+
+            return
+        }
+                
+        function LikeBtn(tweet){
+            return `<button class='btn btn-primary btn-sm' 
+                    onclick=handleTweetActionBtn(${tweet.id},${tweet.likes},'like')>
+                    ${tweet.likes} Like</button>`
+        }
+        function UnLikeBtn(tweet){
+            return `<button class='btn btn-outline-danger btn-sm' 
+                    onclick=handleTweetActionBtn(${tweet.id},${tweet.likes},'unlike')>
+                    dislike</button>`
+        }
+        function RetweetBtn(tweet){
+            return `<button class='btn btn-outline-success btn-sm' 
+                    onclick=handleTweetActionBtn(${tweet.id},${tweet.likes},'retweet')>
+                    share</button>`
+        }
+        
+        
+        function formatTweetElement(tweet, currentUser){
+            //console.log(profile)
+            //console.log(username, currentUser); //console.log(tweet)
+            if (tweet.user == currentUser) {
+                var formattedTweet = `<div class='col-10 border rounded py-4 mb-1 tweet ' id='tweet-${tweet.id}'> 
+                                    <p><strong><button class="btn" onclick=profile_manager('${tweet.user}') >${tweet.user}</button></strong> on ${tweet.timestamp} </p>
+                                    <hr>
+                                    <p> ${tweet.content}  <small><a href='/api/tweets/${tweet.id}/edit'>Edit</a></small> </p>
+                                    <div class='btn-group'> 
+                                        ${LikeBtn(tweet)}  
+                                        ${UnLikeBtn(tweet)}
+                                    </div></div>`
+            }else {
+                var formattedTweet = `<div class='col-10 border rounded py-4 mb-1 tweet ' id='tweet-${tweet.id}'> 
+                                    <p><strong><button class="btn" onclick=profile_manager('${tweet.user}') >${tweet.user}</button></strong> on ${tweet.timestamp} </p>
+                                    <hr>
+                                    <p> ${tweet.content} </p> 
+                                    <div class='btn-group'> 
+                                        ${LikeBtn(tweet)}  
+                                        ${UnLikeBtn(tweet)}
+                                    </div></div>`
+            }
+            console.log(tweet.user, currentUser)
+            return formattedTweet
+    }       
+        
+        function navHandler(navElement, page) {
+            const xhr = new XMLHttpRequest()
+            const method = "GET"
+            var page_no = parseInt(page)
+            const url = `/tweets?page=${page_no}`
+            const responseType = "json"
+
+            xhr.responseType = responseType
+            xhr.open(method, url) // Open request with prescribed method and url 
+            xhr.onload = function() { 
+                const serverResponse = xhr.response
+                const pagecounter = serverResponse.count / 10
+                const next_page = serverResponse.next
+                const previous_page = serverResponse.previous
+                console.log("Previous page Address:", previous_page)
+                console.log("Next page Address:", next_page)
+                
+                if (typeof(next_page) != undefined) {
+                    //var url = new URL(next_page);
+                    //var next_page_number = url.searchParams.get("page");
+                    var next_page_no = page_no +1
+                } else next_page_no = page_no
+
+                if (typeof(previous_page) != undefined) {
+                    //var url = new URL(previous_page);
+                    //var previous_page_number = url.searchParams.get("page");
+                    var previous_page_no = page_no - 1
+                } else previous_page_no = page_no
+                
+                //console.log("Previous page Number:", previous_page_number)
+                //console.log("Next page Number:", next_page_number)
+
+                var paginationManager = `
+                <nav aria-label="Page navigation example">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item " id="previous_link">
+                            <button class="page-link" tabindex="-1" aria-disabled="true" onclick="loadTweets(tweetsContainerElement, ${previous_page_no})">Previous</button>
+                        </li>
+                        <li class="page-item">
+                            <button class="page-link" id="next_link" onclick="loadTweets(tweetsContainerElement, ${next_page_no})">Next</button>
+                        </li>
+                    </ul>
+                </nav>
+                
+                `
+                navElement.innerHTML = paginationManager
+                console.log("Current:", page_no, " Previous:", previous_page_no, " Next:", next_page_no)
+            }
+            xhr.send() //trigger that requests
+        }
+        navHandler(navElement, 1)
+
+
+
+       
+// });       
+</script>
+{% endblock %}
+

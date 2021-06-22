@@ -1,0 +1,230 @@
+{% extends "network/layout.html" %}
+
+{% block body %}
+<div id="userProfile" class="container-fluid">
+    <div class="profileDiv">
+        <div class="userDiv">
+            <div id="profileDiv">
+                <h3 id="profile_username"></h3>
+            </div>
+            <div id="followingDiv">
+                <h7 id="profile_followings"></h7><br>
+                <h7 id="profile_followers"></h7>
+            </div>
+        </div>
+        {% if user.is_authenticated %}
+        <div id="follow_button_div">
+            <button id="follow_button" class="btn btn-primary">Follow</button>
+        </div>
+        {% endif %}
+    </div>
+    <div class="row justify-content-center" id="Profile-tweets">
+        Replace me
+    </div>
+    <div class="pagination justify-content-center">
+        <nav aria-label="Page navigation example">
+            <ul class="pagination justify-content-center">
+              <li class="page-item">
+                  <button class="page-link" tabindex="-1" aria-disabled="true" id="previousProfileNav">Previous</button>
+                
+              </li>
+              <li class="page-item">
+                <button class="page-link btn-primary btn-outline-success" id="nextProfileNav">Next</button>
+            </li>
+            </ul>
+          </nav>
+    </div>
+</div>
+
+<script>
+
+const profileTweetContainer = document.getElementById("Profile-tweets")
+
+//################################PROFILE###############
+
+if (document.querySelector('#userProfile') != null) {
+        document.querySelector('#userProfile').style.display = 'none';
+    }
+        function handleTweetfollowUnfollowBtn(username, currentUser, action) {
+            console.log(username, currentUser, "From followUnfollowButton Clicked", action, "<= Action")
+            const url = `profile/${username}/action`
+            const method = "POST" 
+            let followButton = document.querySelector('#follow_button');
+            if (followButton.innerHTML === 'Follow') {
+                toaction = 'follow';
+                followButton.innerHTML = 'Unfollow';
+            } else {
+                toaction = 'unfollow';
+                followButton.innerHTML = 'Follow';
+            }
+            const data = JSON.stringify({
+                action: toaction
+            })
+            const xhr = new XMLHttpRequest()
+            const csrftoken = getCookie('csrftoken');
+
+            xhr.open(method, url)
+            xhr.setRequestHeader("Content-Type", "application/json")
+            xhr.setRequestHeader("HTTP_X_REQUESTED_WITH", "XMLHttpRequest")
+            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest")
+            xhr.setRequestHeader("X-CSRFToken", csrftoken)
+            xhr.onload = function() {
+                profile_manager(username)
+            }
+            xhr.send(data)
+
+            return
+        }
+
+    function profile_manager(username) {
+        document.querySelector('#tweet-create-form').style.display = 'none';
+        document.querySelector('#tweets').style.display = 'none';
+        document.querySelector('#handleNav').style.display = 'none';
+
+        fetch(`/profile/${username}`)
+            .then((response) => response.json())
+            .then((profile) => {
+                let profileFollowers = profile.results.followers;
+                let profileFollowings = profile.results.followings;
+                let isFollowed = profile.results.isFollowed;
+                let currentUser = profile.results.currentUser_name;
+                //console.log(profile)
+                //console.log(username, currentUser);
+
+                if (username != currentUser) {
+                    followButton = document.querySelector('#follow_button');
+                    followButton.style.display = 'block';
+                    if (isFollowed == false) {
+                        followButton.onclick = () => handleTweetfollowUnfollowBtn(username, currentUser, 'follow');
+                    }else {
+                        followButton.onclick = () => handleTweetfollowUnfollowBtn(username, currentUser, 'unfollow');
+                    }
+                }
+                else {
+                    document.querySelector('#follow_button').style.display = 'None';
+                    document.querySelector('#tweet-create-form').style.display = 'block';
+                }
+                document.querySelector('#userProfile').style.display = 'block';
+
+                userDOM = document.querySelector('#profile_username');
+                userDOM.innerHTML = username;
+                userDOM.onclick = () => show_profile(username);
+
+                following = document.querySelector('#profile_followings');
+                following.innerHTML = `Followings: ${profileFollowings}`;
+                following.onclick = 'nothing yet';
+
+                followers = document.querySelector('#profile_followers');
+                followers.innerHTML = `Followers: ${profileFollowers}`;
+                followers.onclick = 'nothing yet';
+
+                if (isFollowed === true) {
+                    followButton.innerHTML = 'Unfollow';
+                }
+        });
+        loadProfileTweets(username, 1)
+    }
+
+    function loadProfileTweets(username, page) {
+        const xhr = new XMLHttpRequest()
+        const method = "GET"
+        var page_no = parseInt(page)
+        const url = `/profile/${username}?page=${page_no}`
+        const responseType = "json"
+        xhr.responseType =responseType
+        xhr.open(method, url)
+        xhr.onload = function(){
+            const serverResponse = xhr.response
+            const listedItems = serverResponse.results.Tweets //array
+            var finalTweetStr = ""
+            var i;
+            for(i=0; i<listedItems.length;i++) {
+                var tweetObj = listedItems[i]
+                var currentItem = formatTweetElement(tweetObj)
+                finalTweetStr += currentItem
+            }
+            document.querySelector('#Profile-tweets').innerHTML = finalTweetStr
+        }
+        xhr.send()
+        profileNavManager(username, page_no)
+    }
+
+    function profileNavManager(username, page){
+        const xhr = new XMLHttpRequest()
+        const method = "GET"
+        var page_no = parseInt(page)
+        const url = `/profile/${username}?page=${page_no}`
+        const responseType = "json"
+        xhr.responseType =responseType
+        xhr.open(method, url)
+        xhr.onload = function(){
+            const serverResponse = xhr.response
+            const pagecounter = serverResponse.count / 10
+            const next_page = serverResponse.next
+            const previous_page = serverResponse.previous
+            let previousNavElement = document.querySelector('#previousProfileNav')
+            let nextNavElement = document.querySelector('#nextProfileNav')
+            console.log("Previous page Address:", previous_page)
+            console.log("Next page Address:", next_page)
+            console.log("PAGE:", page_no)
+
+
+            if (previous_page != null) {
+                //var previous_url = new URL(previous_page);
+                //var previous_page_number = previous_url.searchParams.get("page");
+                var previous_page_no = page_no - 1
+                previousNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("Went back")
+                    loadProfileTweets(username, previous_page_no)
+                };
+            } else {
+                previousNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("STUCK start")
+                    loadProfileTweets(username, 1)
+                };
+            }
+            if (next_page != null) {
+                //var next_url = new URL(next_page);
+                //var next_page_number = next_url.searchParams.get("page");
+                var next_page_no = page_no + 1
+                nextNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("Went forward")
+                    loadProfileTweets(username, next_page_no)
+                };
+            } else {
+                nextNavElement.onclick = function(event) {
+                    event.preventDefault()
+                    console.log("STUCK last")
+                    loadProfileTweets(username, page_no)
+                };
+            }   
+        }
+        xhr.send()
+    }
+        
+//####################################################
+
+        
+// SImple functions for management purposes
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+</script>
+
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "network/layout.html" %}
+{% block title %}Update Tweet{% endblock %}
+{% block body %}
+
+<h1>Edit Tweet</h1>
+<form method="POST">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="btn btn-secondary col-3 border rounded py-4 mb-1"><a href="{% url 'index' %}" style="text-decorations:none; color:inherit;"> UPDATE</a></button>
+</form>
+
+{% endblock %}
